@@ -1,3 +1,4 @@
 requests
 backoff
 tqdm
+pyqt5

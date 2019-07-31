@@ -1,4 +1,4 @@
 {
-  "index_endpoint": "https://unstable.life/fp-index",
-  "file_endpoint": "https://unstable.life/fp"
+  "index_endpoint": "https://unstable.life/fp-index/",
+  "file_endpoint": "https://unstable.life/fp/"
 }
