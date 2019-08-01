@@ -215,6 +215,7 @@ if os.name == 'nt':
 
 res_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 
+QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
 app = QApplication([sys.argv])
 app.setApplicationName('Flashpoint Updater')
 app.setWindowIcon(QIcon(os.path.join(res_path, 'icon.png')))
