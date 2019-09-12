@@ -30,11 +30,17 @@ class IndexServer(object):
     def available_indexes(self):
         return self.meta['indexes'].keys()
 
+    def available_updates(self):
+        return list(map(lambda x: x[0], filter(lambda x: 'root' in x[1], self.meta['indexes'].items())))
+
     def get_latest(self):
         return self.meta['latest']
 
     def get_anchor(self):
         return self.meta.get('anchor', None)
+
+    def get_root(self, name):
+        return urljoin(self.endpoint, self.index(name)['root'])
 
     def autodetect_anchor(self, anchor_hash):
         anchor = self.get_anchor()
@@ -43,11 +49,11 @@ class IndexServer(object):
             autodetect = anchor['autodetect']
         return autodetect.get(anchor_hash, None)
 
-    def info(self, name):
-        return self.meta['indexes'][name]['info']
+    def index(self, name):
+        return self.meta['indexes'][name]
 
     def fetch(self, name, reporter, block_size=2048):
-        index_meta = self.meta['indexes'][name]
+        index_meta = self.index(name)
         r = requests.get(urljoin(self.endpoint, index_meta['path']), stream=True)
         r.raise_for_status()
         data = bytearray()

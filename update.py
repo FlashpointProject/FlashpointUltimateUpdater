@@ -117,19 +117,26 @@ if __name__ == '__main__':
         print('Could not retrieve index metadata: %s' % str(e))
         sys.exit(0)
 
-    def worker(reporter, root_path, server, file_endpoint, current, target):
+    def worker(reporter, root_path, server, current, target):
+        if target not in server.available_indexes():
+            print('Could not find index: %s' % target)
+            reporter.stop()
+            return
+        if target not in server.available_updates():
+            print('Target version not available as an update')
+            reporter.stop()
+            return
+        remote_root = server.get_root(target)
         try:
             current, target = server.fetch(current, reporter), server.fetch(target, reporter)
-        except KeyError as e:
-            print('Could not find index: %s' % e.args[0])
-            sys.exit(0)
         except requests.exceptions.RequestException as e:
             print('Could not retrieve index: %s' % str(e))
-            sys.exit(0)
-        perform_update(root_path, current, target, file_endpoint, reporter)
+            reporter.stop()
+            return
+        perform_update(root_path, current, target, remote_root, reporter)
 
     reporter = ProgressReporter()
-    threading.Thread(target=worker, args=(reporter, flashpoint, server, config['file_endpoint'], sys.argv[2], sys.argv[3])).start()
+    threading.Thread(target=worker, args=(reporter, flashpoint, server, sys.argv[2], sys.argv[3])).start()
     for task in reporter.tasks():
         print(task.title)
         for step in tqdm(reporter.steps(), total=task.length, unit=task.unit or 'it', ascii=True):

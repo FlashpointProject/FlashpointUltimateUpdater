@@ -18,12 +18,11 @@ import re
 class UpdateThread(QThread):
     sig_exc = pyqtSignal(Exception)
 
-    def __init__(self, reporter, root_path, server, file_endpoint, current, target):
+    def __init__(self, reporter, root_path, server, current, target):
         QThread.__init__(self)
         self.reporter = reporter
         self.root_path = root_path
         self.server = server
-        self.file_endpoint = file_endpoint
         self.current = current
         self.target = target
 
@@ -31,7 +30,7 @@ class UpdateThread(QThread):
         try:
             current = self.server.fetch(self.current, self.reporter)
             target = self.server.fetch(self.target, self.reporter)
-            update.perform_update(self.root_path, current, target, self.file_endpoint, self.reporter)
+            update.perform_update(self.root_path, current, target, server.get_root(self.target), self.reporter)
         except Exception as e:
             if not self.reporter.is_stopped(): # Interrupted from outside (on exit)
                 self.reporter.logger.critical('Update failed', exc_info=True)
@@ -55,10 +54,9 @@ class ReporterThread(QThread):
         self.sig_done.emit(self.reporter.elapsed())
 
 class Updater(QDialog):
-    def __init__(self, server, file_endpoint, parent=None):
+    def __init__(self, server, parent=None):
         super(Updater, self).__init__(parent)
         self.server = server
-        self.file_endpoint = file_endpoint
         self.reporter_thread = None
         self.update_thread = None
         self.step_unit = None
@@ -76,7 +74,7 @@ class Updater(QDialog):
         self.autodetect_checkbox.setChecked(True)
         self.autodetect_checkbox.toggled.connect(self.on_autodetect_checked)
         self.to_combo_box = QComboBox()
-        self.to_combo_box.addItems(self.server.available_indexes())
+        self.to_combo_box.addItems(self.server.available_updates())
         self.update_button = QPushButton('Go!')
         self.update_button.clicked.connect(self.on_update_button)
         self.status_label = QLabel('Idle.')
@@ -185,7 +183,7 @@ class Updater(QDialog):
         self.reporter_thread.sig_step.connect(self.step)
         self.reporter_thread.sig_done.connect(self.set_done)
         self.reporter_thread.start()
-        self.update_thread = UpdateThread(reporter, root_path, self.server, self.file_endpoint, current, target)
+        self.update_thread = UpdateThread(reporter, root_path, self.server, current, target)
         self.update_thread.sig_exc.connect(self.update_failed)
         self.update_thread.start()
 
@@ -239,6 +237,13 @@ except requests.exceptions.RequestException as e:
     QMessageBox.critical(None, 'Initialization error', 'Could not retrieve index metadata. Please, check the log file for more details.')
     sys.exit(0)
 
-updater = Updater(server, config['file_endpoint'])
+if not server.available_updates():
+    QMessageBox.critical(None, 'No updates available', '\n'.join([
+        'No root specified for any index by the remote server.',
+        'Please check your configuration file or contact a server administrator.'
+    ]))
+    sys.exit(0)
+
+updater = Updater(server)
 updater.show()
 app.exec_()
