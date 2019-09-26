@@ -45,7 +45,8 @@ This listing must obey the following structure (note the following is not valid 
       "indexes": {
         "1.0": {
           "path": "/fp-index/1.0.json.xz", # relative path to the file that holds the index
-          "lzma": true, # whether LZMA compression was applied to the file
+          "root": "/fp/", # relative path to where the flashpoint data resides
+          "lzma": true, # whether LZMA compression was applied to the index file
           "info": "blank" # currently unused: should contain a changelog or description of some sort
         }
       },
