@@ -226,7 +226,7 @@ except FileNotFoundError:
     QMessageBox.critical(None, 'Initialization error', 'Config file not found!')
     sys.exit(0)
 except ValueError:
-    logger.critical('Could parse configuration file. Aborted.')
+    logger.critical('Could not parse configuration file. Aborted.')
     QMessageBox.critical(None, 'Initialization error', 'Config file cannot be parsed!')
     sys.exit(0)
 
@@ -235,6 +235,10 @@ try:
 except requests.exceptions.RequestException as e:
     logger.critical('Could not retrieve index metadata: %s' % str(e))
     QMessageBox.critical(None, 'Initialization error', 'Could not retrieve index metadata. Please, check the log file for more details.')
+    sys.exit(0)
+except ValueError:
+    logger.critical('Could not parse index metadata. Aborted.')
+    QMessageBox.critical(None, 'Initialization error', 'Index metadata cannot be parsed! Please check your configuration file or contact a server administrator.')
     sys.exit(0)
 
 if not server.available_updates():
