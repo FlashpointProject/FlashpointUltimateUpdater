@@ -63,6 +63,7 @@ class Updater(QDialog):
         self.progress = 0
 
         self.root_path = QLineEdit()
+        self.root_path.textChanged[str].connect(self.on_path_changed)
         self.browse_button = QPushButton('Browse...')
         self.browse_button.clicked.connect(self.on_browse_button)
         self.progress_bar = QProgressBar()
@@ -76,6 +77,7 @@ class Updater(QDialog):
         self.to_combo_box = QComboBox()
         self.to_combo_box.addItems(self.server.available_updates())
         self.update_button = QPushButton('Go!')
+        self.update_button.setEnabled(False)
         self.update_button.clicked.connect(self.on_update_button)
         self.status_label = QLabel('Idle.')
         self.step_label = QLabel()
@@ -152,6 +154,9 @@ class Updater(QDialog):
     def on_autodetect_checked(self):
         self.from_combo_box.setEnabled(not self.autodetect_checkbox.isChecked())
         self.perform_autodetect()
+
+    def on_path_changed(self, path):
+        self.update_button.setEnabled(bool(path))
 
     def on_browse_button(self):
         dialog = QFileDialog(self, 'Select root path...')
