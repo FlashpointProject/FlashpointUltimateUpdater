@@ -5,6 +5,7 @@ from urllib.parse import quote, urljoin
 from concurrent.futures import as_completed
 import concurrent.futures
 import threading
+import argparse
 import urllib3
 import datetime
 import requests
@@ -107,11 +108,14 @@ if __name__ == '__main__':
     with open('config.json', 'r') as f:
         config = json.load(f)
 
-    if len(sys.argv) != 4:
-        print('Usage: update.py <flashpoint-path> <current-version> <target-version>')
-        sys.exit(0)
+    parser = argparse.ArgumentParser(description="Updater for BlueMaxima's Flashpoint.")
+    parser.add_argument('path', metavar='flashpoint-path')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--update', '-u', nargs=2, metavar=('current', 'target'))
+    group.add_argument('--check', '-c', action='store_true')
+    args = parser.parse_args()
 
-    flashpoint = index.win_path(sys.argv[1])
+    flashpoint = index.win_path(args.path)
     if not os.path.isdir(flashpoint):
         print('Error: Flashpoint path not found.')
         sys.exit(0)
@@ -120,6 +124,19 @@ if __name__ == '__main__':
         server = IndexServer(config['index_endpoint'])
     except requests.exceptions.RequestException as e:
         print('Could not retrieve index metadata: %s' % str(e))
+        sys.exit(0)
+
+    if args.check:
+        anchor = server.get_anchor()
+        version = None
+        if anchor:
+            try:
+                hash = index.hash(os.path.join(args.path, anchor['file']), 'sha1')
+                version = server.autodetect_anchor(hash)
+            except FileNotFoundError:
+                pass
+        print('Current version: %s' % (version or 'Unavailable'))
+        print('Latest version: %s' % server.get_latest())
         sys.exit(0)
 
     def worker(reporter, root_path, server, current, target):
@@ -140,8 +157,9 @@ if __name__ == '__main__':
             return
         perform_update(root_path, current, target, remote_root, reporter)
 
+    current, target = args.update
     reporter = ProgressReporter()
-    threading.Thread(target=worker, args=(reporter, flashpoint, server, sys.argv[2], sys.argv[3])).start()
+    threading.Thread(target=worker, args=(reporter, flashpoint, server, current, target)).start()
     for task in reporter.tasks():
         print(task.title)
         for step in tqdm(reporter.steps(), total=task.length, unit=task.unit or 'it', ascii=True):
