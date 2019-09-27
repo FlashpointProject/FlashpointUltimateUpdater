@@ -21,7 +21,9 @@ import os
 
 @backoff.on_exception(backoff.expo,
                       (requests.exceptions.RequestException, urllib3.exceptions.ProtocolError, urllib3.exceptions.ReadTimeoutError),
-                      giveup=lambda e: 400 <= e.response.status_code < 500, logger='reporter')
+                      logger='reporter', max_value=20)
+@backoff.on_exception(backoff.expo, requests.exceptions.HTTPError,
+                      giveup=lambda e: 400 <= e.response.status_code < 500, logger='reporter', max_value=20)
 def download_file(session, url, dest):
     with session.get(url, stream=True, timeout=10) as r:
         r.raise_for_status()
