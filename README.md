@@ -19,16 +19,16 @@ The updater for BlueMaxima's Flashpoint.
 1. Download the latest release.
 2. Unpack anywhere.
 3. Run it from the command-line as such:
-`FlashpointUpdater.exe <flashpoint-path> <current-version> <target-version>`
+`FlashpointUpdater.exe <flashpoint-path> -u <current-version> <target-version>`
 
-##### Example: `FlashpointUpdater.exe C:\Flashpoint 5.5 6.1`
+##### Example: `FlashpointUpdater.exe C:\Flashpoint -u 5.5 6.1`
 
 ### Mac/Linux
 
 1. Install Python 3.
 2. Clone the repository.
 3. Run in the project root: `pip install -r requirements.txt`
-4. Use it like: `update.py /media/ext1/Flashpoint <flashpoint-path> <current-version> <target-version>`
+4. Use it like: `update.py /media/ext1/Flashpoint <flashpoint-path> -u <current-version> <target-version>`
 
 Or launch the GUI version with `update_gui.py`.
 
