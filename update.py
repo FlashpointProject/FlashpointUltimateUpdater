@@ -2,8 +2,6 @@
 from core import IndexServer, Task, ProgressReporter
 from tqdm import tqdm
 from urllib.parse import quote, urljoin
-from concurrent.futures import as_completed
-import concurrent.futures
 import threading
 import argparse
 import urllib3
@@ -59,13 +57,13 @@ def perform_update(flashpoint, current, target, file_endpoint, reporter):
             reporter.logger.info('File from target index already in temp folder. Skipped: %s' % hash)
 
     session = requests.Session()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        tasks = list()
+    with core.BufferedExecutor(32, max_workers=8) as executor:
         for hash in to_download:
             path = target['files'][hash][0]
             url = urljoin(file_endpoint, quote(path))
-            tasks.append(executor.submit(core.wrap_call, download_file, session, url, os.path.join(tmp, hash), store=path))
-        for future, report in reporter.task_it('Downloading new data...', as_completed(tasks), length=len(tasks), unit='file'):
+            executor.submit(core.wrap_call, download_file, session, url, os.path.join(tmp, hash),
+                            store=path, cancel=reporter.is_stopped)
+        for future, report in reporter.task_it('Downloading new data...', executor.as_completed(), length=len(to_download), unit='file'):
             report(os.path.basename(future.result().store))
 
     reporter.task('Removing obsolete files...')

@@ -1,5 +1,6 @@
 from collections import namedtuple
 from urllib.parse import urljoin
+import concurrent.futures
 import threading
 import requests
 import datetime
@@ -10,13 +11,51 @@ import lzma
 import json
 import math
 
-# Allows you to retrieve the arguments passed to a function and
-# an arbitrary value by passing a 'store' or '_store' argument
-# as its return value. Good for use with concurrent.futures.
+# Calls a function and returns an object with the arguments used, its
+# return value and an arbitrary value provided by 'store' or '_store'.
+# In addition, a callable may be passed to either 'cancel' or '_cancel'
+# that may override the return value if it evaluates to a truthy value,
+# in which case, the original call will not be made. The callable must
+# take no arguments. This is intended for use with concurrent.futures.
 def wrap_call(function, *args, **kwargs):
     store = kwargs.pop('_store', kwargs.pop('store', None))
+    cancel = kwargs.pop('_cancel', kwargs.pop('cancel', lambda: None))
     Wrap = namedtuple('Wrap', ['result', 'store', 'args', 'kwargs'])
-    return Wrap(function(*args, **kwargs), store, args, kwargs)
+    return Wrap(cancel() or function(*args, **kwargs), store, args, kwargs)
+
+class BufferedExecutor(object):
+    def __init__(self, submit_size, *args, **kwargs):
+        self._submit_size = submit_size
+        self._executor = concurrent.futures.ThreadPoolExecutor(*args, **kwargs)
+        self._buffer = list()
+        self._shutdown = False
+
+    def submit(self, fn, *args, **kwargs):
+        self._buffer.append((fn, args, kwargs))
+
+    def __submit_from_buffer(self):
+        fn, args, kwargs = self._buffer.pop(0)
+        return self._executor.submit(fn, *args, **kwargs)
+
+    def as_completed(self):
+        submitted = [self.__submit_from_buffer() for _ in range(self._submit_size)]
+        while self._buffer and not self._shutdown:
+            done, _ = concurrent.futures.wait(submitted, return_when=concurrent.futures.FIRST_COMPLETED)
+            for future in done:
+                submitted.remove(future)
+                submitted.append(self.__submit_from_buffer())
+                yield future
+
+    def shutdown(self, wait=True):
+        self._shutdown = True
+        self._executor.shutdown(wait=wait)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.shutdown(wait=True)
+        return False
 
 class IndexServer(object):
     # Index metadata schema:
