@@ -27,6 +27,9 @@ def download_file(session, url, dest):
     with session.get(url, stream=True, timeout=10) as r:
         r.raise_for_status()
         with open(dest, 'wb') as f:
+            if 'Content-Length' in r.headers:
+                length = int(r.headers['Content-Length'])
+                f.truncate(length)
             shutil.copyfileobj(r.raw, f)
 
 # Fix for "read-only" files on Windows
