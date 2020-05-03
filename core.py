@@ -142,7 +142,7 @@ class ProgressReporter(object):
             self._step_queue.put(PoisonPill())
 
     def task_it(self, title, iterator, unit=None, length=None):
-        if not length:
+        if length is None:
             length = len(iterator) if iterator else None
         self.task(title, unit=unit, length=length)
         for item in iterator:
