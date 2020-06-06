@@ -62,6 +62,11 @@ class Updater(QDialog):
         self.step_unit = None
         self.progress = 0
 
+        if getattr(sys, 'frozen', False):
+            self.app_path = os.path.abspath(sys.executable)
+        else:
+            self.app_path = os.path.abspath(__file__)
+
         self.root_path = QLineEdit()
         self.root_path.textChanged[str].connect(self.on_path_changed)
         self.browse_button = QPushButton('Browse...')
@@ -177,6 +182,9 @@ class Updater(QDialog):
         root_path = index.win_path(str(self.root_path.text()))
         if not os.path.isdir(root_path):
             QMessageBox.critical(self, 'Cannot proceed', 'Please make sure that the root path exists.')
+            return
+        if index.win_path(self.app_path).lower().startswith(root_path.lower()):
+            QMessageBox.critical(self, 'Cannot proceed', 'Flashpoint Updater is found under the root path.\nPlease move it to a different location to proceed.')
             return
         self.update_button.setEnabled(False)
         current = str(self.from_combo_box.currentText())
