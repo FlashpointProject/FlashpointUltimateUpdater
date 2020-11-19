@@ -7,10 +7,13 @@ from datetime import datetime
 import threading
 import requests
 import logging
+import shutil
 import ctypes
 import update
 import index
 import json
+import glob
+import time
 import sys
 import os
 import re
@@ -26,8 +29,31 @@ class UpdateThread(QThread):
         self.current = current
         self.target = target
 
+    def create_backup(self, backup_paths):
+        files = list()
+        for rel_glob in backup_paths:
+            path_glob = os.path.join(self.root_path, rel_glob)
+            for path in glob.glob(path_glob):
+                if not os.path.isfile(path):
+                    continue
+                rel = os.path.relpath(path, self.root_path)
+                files.append((path, rel))
+        if not files:
+            return
+        backup = os.path.join('backups', time.strftime('%Y-%m-%d_%H-%M-%S'))
+        self.reporter.logger.info('Backup folder: %s' % backup)
+        for (path, rel), report in self.reporter.task_it('Backing up files...', files):
+            report(rel)
+            dest = os.path.join(backup, rel)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copy(path, dest)
+            self.reporter.logger.info('Saved: %s' % rel)
+
     def run(self):
+        backup_paths = self.server.get_backup_paths(self.current)
         try:
+            if backup_paths:
+                self.create_backup(backup_paths)
             current = self.server.fetch(self.current, self.reporter)
             target = self.server.fetch(self.target, self.reporter)
             update.perform_update(self.root_path, current, target, server.get_root(self.target), self.reporter)

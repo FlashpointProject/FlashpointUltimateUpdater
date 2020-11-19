@@ -1,4 +1,4 @@
-# Flashpoint Updater
+# Flashpoint Ultimate Updater
 
 The updater for BlueMaxima's Flashpoint.
 
@@ -8,7 +8,7 @@ The updater for BlueMaxima's Flashpoint.
 
 **GUI Version (Recommended)**
 
-1. Download the [latest release](https://github.com/FlashpointProject/FlashpointUpdater/releases/latest).
+1. Download the [latest release](https://github.com/FlashpointProject/FlashpointUltimateUpdater/releases/latest).
 2. Unpack anywhere.
 3. Run FlashpointUpdaterQt.exe
 4. Select your Flashpoint path and target version.
@@ -48,6 +48,10 @@ This listing must obey the following structure (note the following is not valid 
           "root": "/fp/", # relative path to where the flashpoint data resides
           "lzma": true, # whether LZMA compression was applied to the index file
           "info": "blank" # currently unused: should contain a changelog or description of some sort
+          "backup": [ # optional: list of glob patterns to back up before performing an update
+            "Data/flashpoint.sqlite",
+            "FPSoftware/Important/*"
+          ]
         }
       },
       "anchor": {

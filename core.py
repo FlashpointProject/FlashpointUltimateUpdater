@@ -85,6 +85,9 @@ class IndexServer(object):
     def get_root(self, name):
         return urljoin(self.endpoint, self.index(name)['root'])
 
+    def get_backup_paths(self, name):
+        return self.index(name).get('backup', None)
+
     def autodetect_anchor(self, anchor_hash):
         anchor = self.get_anchor()
         autodetect = dict()
