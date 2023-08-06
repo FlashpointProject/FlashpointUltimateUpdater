@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/data/binding"
+	"time"
 )
 
 type UiFile struct {
@@ -52,6 +54,8 @@ type InstallerState struct {
 	fileTitle2           binding.String
 	fileTitle3           binding.String
 	fileTitle4           binding.String
+	rateLimitEntry       binding.String
+	formatRateLimit      binding.String
 }
 
 type NoValidPathFoundError struct{}
@@ -82,4 +86,22 @@ type DatabaseError struct {
 
 func (e *DatabaseError) Error() string {
 	return fmt.Sprintf("Fatal database error\n%s", e.err.Error())
+}
+
+type BadRateLimit struct{}
+
+func (e *BadRateLimit) Error() string {
+	return "Invalid rate limit"
+}
+
+type DownloadRateLimiter struct {
+	rate  int
+	total int64
+}
+
+func (c *DownloadRateLimiter) WaitN(_ context.Context, bytes int) (err error) {
+	c.total += int64(bytes)
+	time.Sleep(
+		time.Duration(1.00 / float64(c.rate) * float64(bytes) * float64(time.Second)))
+	return
 }

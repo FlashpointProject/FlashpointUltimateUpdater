@@ -23,7 +23,8 @@ type Update struct {
 }
 
 type Downloader struct {
-	RateLimit    *int
+	RateLimit    int
+	bufferSize   int
 	state        *InstallerState
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -42,7 +43,8 @@ type Downloader struct {
 
 func NewDownloader(state *InstallerState) *Downloader {
 	d := &Downloader{
-		RateLimit:    nil,
+		RateLimit:    0,
+		bufferSize:   32 * 1024,
 		state:        state,
 		client:       grab.NewClient(),
 		workerWg:     sync.WaitGroup{},
@@ -183,7 +185,8 @@ func (d *Downloader) Resume() error {
 			bytePerSecondRecords := make([]float64, 0)
 
 			queue := func(bytesPerSecond float64) {
-				if len(bytePerSecondRecords) > 6 {
+				// Allow average over 7 records (roughly 3 to 4 seconds)
+				if len(bytePerSecondRecords) > 7 {
 					// Remove first element
 					bytePerSecondRecords = bytePerSecondRecords[1:]
 				}
@@ -275,7 +278,7 @@ func (d *Downloader) Resume() error {
 			for idx, f := range uifiles {
 				if f.Filepath == update.IndexFile.Filepath {
 					// Send bytes update to speed handler
-					bytesDiff := f.Bytes - update.Bytes
+					bytesDiff := update.Bytes - f.Bytes
 					speedch <- bytesDiff
 					// Update ui file
 					f.Progress = update.Progress
@@ -290,7 +293,7 @@ func (d *Downloader) Resume() error {
 				for idx, f := range uifiles {
 					if f.Done == true {
 						// Send bytes update to speed handler
-						bytesDiff := f.Bytes
+						bytesDiff := update.Bytes
 						speedch <- bytesDiff
 						// Update ui file
 						f.Filepath = update.IndexFile.Filepath
@@ -432,6 +435,10 @@ func (d *Downloader) NewRequest(f *IndexedFile) (*grab.Request, error) {
 	req.SetChecksum(sha1.New(), sum, true)
 	req.Size = f.Size
 	req = req.WithContext(d.ctx)
+	req.BufferSize = d.bufferSize
+	if d.RateLimit != 0 {
+		req.RateLimiter = &DownloadRateLimiter{rate: d.RateLimit / 4}
+	}
 
 	// Add indexed file as tag
 	req.Tag = f

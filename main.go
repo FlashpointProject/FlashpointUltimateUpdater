@@ -13,6 +13,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 func main() {
@@ -26,7 +27,7 @@ func main() {
 	defer closeDb()
 
 	w.SetContent(setupLayout(w, state))
-	w.Resize(fyne.Size{Width: 500, Height: 400})
+	w.Resize(fyne.Size{Width: 700, Height: 400})
 
 	// Show the window
 	w.ShowAndRun()
@@ -54,6 +55,8 @@ func NewInstallState(w fyne.Window) *InstallerState {
 		fileProgress2:        binding.NewFloat(),
 		fileProgress3:        binding.NewFloat(),
 		fileProgress4:        binding.NewFloat(),
+		rateLimitEntry:       binding.NewString(),
+		formatRateLimit:      binding.NewString(),
 		baseUrl:              "",
 	}
 	_ = state.folderPath.Set("Not Set")
@@ -70,6 +73,8 @@ func NewInstallState(w fyne.Window) *InstallerState {
 	_ = state.fileProgress2.Set(0)
 	_ = state.fileProgress3.Set(0)
 	_ = state.fileProgress4.Set(0)
+	_ = state.rateLimitEntry.Set("")
+	_ = state.formatRateLimit.Set("Unlimited")
 
 	state.Grabber = NewDownloader(&state)
 	return &state
@@ -181,34 +186,85 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 	// Create active file bars
 	fileLabel := widget.NewLabel("File: ")
 	fileHeader1 := widget.NewLabelWithData(state.fileTitle1)
-	fileContainer1 := container.New(layout.NewHBoxLayout(),
-		fileLabel,
-		fileHeader1)
+	fileHeader1.Alignment = fyne.TextAlignLeading
+	fileHeader1.Wrapping = fyne.TextTruncate
+	fileContainer1 := container.NewBorder(nil, nil, fileLabel, nil, fileHeader1)
 	fileProgressBar1 := widget.NewProgressBarWithData(state.fileProgress1)
 
 	fileHeader2 := widget.NewLabelWithData(state.fileTitle2)
-	fileContainer2 := container.New(layout.NewHBoxLayout(),
-		fileLabel,
-		fileHeader2)
+	fileHeader2.Alignment = fyne.TextAlignLeading
+	fileHeader2.Wrapping = fyne.TextTruncate
+	fileContainer2 := container.NewBorder(nil, nil, fileLabel, nil, fileHeader2)
 	fileProgressBar2 := widget.NewProgressBarWithData(state.fileProgress2)
 
 	fileHeader3 := widget.NewLabelWithData(state.fileTitle3)
-	fileContainer3 := container.New(layout.NewHBoxLayout(),
-		fileLabel,
-		fileHeader3)
+	fileHeader3.Alignment = fyne.TextAlignLeading
+	fileHeader3.Wrapping = fyne.TextTruncate
+	fileContainer3 := container.NewBorder(nil, nil, fileLabel, nil, fileHeader3)
 	fileProgressBar3 := widget.NewProgressBarWithData(state.fileProgress3)
 
 	fileHeader4 := widget.NewLabelWithData(state.fileTitle4)
-	fileContainer4 := container.New(layout.NewHBoxLayout(),
-		fileLabel,
-		fileHeader4)
+	fileHeader4.Alignment = fyne.TextAlignLeading
+	fileHeader4.Wrapping = fyne.TextTruncate
+	fileContainer4 := container.NewBorder(nil, nil, fileLabel, nil, fileHeader4)
 	fileProgressBar4 := widget.NewProgressBarWithData(state.fileProgress4)
 
 	progressBarTotal := widget.NewProgressBarWithData(state.progressBarTotal)
 	totalLabel := canvas.NewText("Total Progress...", color.White)
 
-	//rateLimitLabel := widget.NewLabel("Download Speed Limit:")
-	//rateLimitEntry := widget.NewEntry()
+	rateLimitLabel := widget.NewLabel("Download Speed Limit:")
+	rateLimitCurrentLabel := widget.NewLabelWithData(state.formatRateLimit)
+	rateLimitEntry := widget.NewEntryWithData(state.rateLimitEntry)
+	rateLimitSet := widget.NewButton("Set (KB/s)", func() {
+		// Turn entry into number
+		entryLimit, err := state.rateLimitEntry.Get()
+		if err != nil {
+			dialog.NewError(err, w).Show()
+			return
+		}
+		rateLimit, err := strconv.Atoi(entryLimit)
+		if err != nil {
+			dialog.NewError(&BadRateLimit{}, w).Show()
+			return
+		}
+
+		if rateLimit < 200 {
+			rateLimit = 0
+		}
+
+		// Save to downloader and update UI
+		if rateLimit == 0 {
+			err = state.formatRateLimit.Set("Unlimited")
+			if err != nil {
+				dialog.NewError(err, w).Show()
+				return
+			}
+		} else {
+			err = state.formatRateLimit.Set(fmt.Sprintf("%dKB/s", rateLimit))
+			if err != nil {
+				dialog.NewError(err, w).Show()
+				return
+			}
+		}
+
+		state.Grabber.RateLimit = rateLimit * 1024
+
+		// Restart downloader
+		if state.Grabber.running {
+			state.Grabber.Stop()
+			err = state.Grabber.Resume()
+			if err != nil {
+				dialog.NewError(&FatalDownloadFailure{err}, w).Show()
+				return
+			}
+		}
+	})
+
+	rateLimContainer := container.New(layout.NewVBoxLayout(),
+		container.New(layout.NewHBoxLayout(),
+			rateLimitLabel,
+			rateLimitCurrentLabel),
+		container.NewBorder(nil, nil, nil, rateLimitSet, rateLimitEntry))
 
 	// Create buttons
 	button1 := widget.NewButton("Start", func() {
@@ -250,9 +306,6 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 	// Create a row with buttons
 	buttonsRow := container.NewHBox(button1, button2, button3)
 
-	// Create a sidebar label
-	sidebarLabel := widget.NewLabel("Ultimate Updater")
-
 	// Create 3 additional labels
 	downloadedHeaderLabel := widget.NewLabel("Downloaded:")
 	downloadedLabel := widget.NewLabelWithData(state.formatDownloadedSize)
@@ -278,6 +331,7 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 		totalLabel,
 		progressBarTotal,
 		layout.NewSpacer(),
+		rateLimContainer,
 		buttonsRow,
 	)
 
@@ -291,29 +345,23 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 		fileContainer4,
 		fileProgressBar4)
 
-	mainContent := container.New(layout.NewHBoxLayout(),
-		leftMainContent,
-		rightMainContent)
-
-	leftSideContent := container.New(layout.NewVBoxLayout(),
-		sidebarLabel,
-		layout.NewSpacer(),
-		downloadedHeaderLabel,
-		downloadedContainer,
-		speedHeaderLabel,
-		speedLabel)
+	mainContent := container.NewBorder(nil, nil, leftMainContent, nil, rightMainContent)
 
 	line := canvas.NewLine(color.Gray{Y: 0x55})
 	line.StrokeWidth = 2
 
-	// Combine the grid layout and sidebar label in a horizontal box
-	mainLayout := container.New(layout.NewVBoxLayout(),
-		topBarLayout("install"),
-		container.New(layout.NewHBoxLayout(),
-			leftSideContent,
-			line,
-			mainContent),
+	leftSideContent := container.New(layout.NewHBoxLayout(),
+		container.New(layout.NewVBoxLayout(),
+			layout.NewSpacer(),
+			downloadedHeaderLabel,
+			downloadedContainer,
+			speedHeaderLabel,
+			speedLabel),
+		line,
 	)
+
+	// Combine the grid layout and sidebar label in a horizontal box
+	mainLayout := container.NewBorder(topBarLayout("install"), nil, leftSideContent, nil, mainContent)
 
 	return mainLayout
 }
