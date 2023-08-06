@@ -1,0 +1,5 @@
+ultupdater.exe
+*.sqlite*
+venv
+test
+.idea
