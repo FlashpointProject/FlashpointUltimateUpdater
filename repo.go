@@ -2,8 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
-
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -56,13 +54,13 @@ func (repo *SqliteRepo) MarkFileDone(file *IndexedFile) error {
 
 func (repo *SqliteRepo) GetNextFile() (*IndexedFile, error) {
 	var f IndexedFile
+	f.RetryCount = 0
 	err := repo.db.QueryRow(`UPDATE files SET taken = true
 		WHERE rowid = (
 		    SELECT MIN(rowid)
 		    FROM files
 		    WHERE done = false AND taken = false
 		) RETURNING path, size, sha1`).Scan(&f.Filepath, &f.Size, &f.SHA1)
-	fmt.Println(fmt.Sprintf("NEXT path: %s, size: %d", f.Filepath, f.Size))
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +77,7 @@ func (repo *SqliteRepo) GetNextFileBatch(limit int64) ([]*IndexedFile, error) {
 	files := make([]*IndexedFile, 0)
 	for rows.Next() {
 		var f IndexedFile
+		f.RetryCount = 0
 		err = rows.Scan(&f.Filepath, &f.Size, &f.SHA1)
 		if err != nil {
 			return nil, err
@@ -86,7 +85,10 @@ func (repo *SqliteRepo) GetNextFileBatch(limit int64) ([]*IndexedFile, error) {
 		files = append(files, &f)
 	}
 
-	rows.Close()
+	err = rows.Close()
+	if err != nil {
+		return nil, err
+	}
 
 	for _, f := range files {
 		_, updateErr := repo.db.Exec("UPDATE files SET taken = true WHERE path = ?", f.Filepath)
@@ -104,5 +106,15 @@ func (repo *SqliteRepo) ResetDownloadState() error {
 		return err
 	}
 	_, err = repo.db.Exec("UPDATE files SET taken = false")
+	return err
+}
+
+func (repo *SqliteRepo) ClearTakenAll() error {
+	_, err := repo.db.Exec("UPDATE files SET taken = false")
+	return err
+}
+
+func (repo *SqliteRepo) ClearTaken(f *IndexedFile) error {
+	_, err := repo.db.Exec("UPDATE files SET taken = false WHERE path = ?", f.Filepath)
 	return err
 }

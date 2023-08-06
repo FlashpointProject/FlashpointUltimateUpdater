@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 from tqdm import tqdm
-import json
-import lzma
 import os
 import sys
 import hashlib

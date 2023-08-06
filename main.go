@@ -89,7 +89,7 @@ func setupLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 			if f == nil {
 				return
 			}
-			fmt.Printf("chosen: %v", f.Path())
+			fmt.Printf("chosen: %v\n", f.Path())
 			// Validate path
 			p, resumable, err := validatePath(f.Path())
 			if err != nil {
@@ -124,7 +124,6 @@ func setupLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 				_ = state.formatDownloadedSize.Set(FormatBytes(state.downloadedSize))
 				_ = state.formatTotalSize.Set(FormatBytes(state.totalSize))
 				progress := float64(state.downloadedSize) / float64(state.totalSize) * 100
-				fmt.Println(progress)
 				err = state.progressBarTotal.Set(progress)
 				if err != nil {
 					dialog.NewError(err, w).Show()
@@ -193,13 +192,13 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 		fileHeader2)
 	fileProgressBar2 := widget.NewProgressBarWithData(state.fileProgress2)
 
-	fileHeader3 := widget.NewLabelWithData(state.fileTitle1)
+	fileHeader3 := widget.NewLabelWithData(state.fileTitle3)
 	fileContainer3 := container.New(layout.NewHBoxLayout(),
 		fileLabel,
 		fileHeader3)
 	fileProgressBar3 := widget.NewProgressBarWithData(state.fileProgress3)
 
-	fileHeader4 := widget.NewLabelWithData(state.fileTitle1)
+	fileHeader4 := widget.NewLabelWithData(state.fileTitle4)
 	fileContainer4 := container.New(layout.NewHBoxLayout(),
 		fileLabel,
 		fileHeader4)
@@ -207,6 +206,9 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 
 	progressBarTotal := widget.NewProgressBarWithData(state.progressBarTotal)
 	totalLabel := canvas.NewText("Total Progress...", color.White)
+
+	//rateLimitLabel := widget.NewLabel("Download Speed Limit:")
+	//rateLimitEntry := widget.NewEntry()
 
 	// Create buttons
 	button1 := widget.NewButton("Start", func() {
@@ -231,6 +233,11 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 			dialog.NewError(&DatabaseError{err}, w).Show()
 			return
 		}
+
+		// Update progress state
+		_ = state.progressBarTotal.Set(0)
+		state.downloadedSize = 0
+		_ = state.formatDownloadedSize.Set("0.0B")
 
 		// Start downloader again
 		err = state.Grabber.Resume()
@@ -259,7 +266,7 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 		widget.NewLabel("/"),
 		totalSizeLabel)
 
-	speedHeaderLabel := widget.NewLabel("Current Download Speed:")
+	speedHeaderLabel := widget.NewLabel("Average Speed:")
 	speedHeaderLabel.Alignment = fyne.TextAlignLeading
 	speedLabel := widget.NewLabelWithData(state.formatDownloadSpeed)
 	speedLabel.Alignment = fyne.TextAlignLeading

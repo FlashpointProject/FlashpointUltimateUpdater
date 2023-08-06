@@ -9,13 +9,15 @@ import (
 type UiFile struct {
 	Filepath string
 	Progress float64
+	Bytes    int64
 	Done     bool
 }
 
 type IndexedFile struct {
-	Filepath string `json:"path"`
-	Size     int64  `json:"size"`
-	SHA1     string `json:"sha1"`
+	Filepath   string `json:"path"`
+	Size       int64  `json:"size"`
+	SHA1       string `json:"sha1"`
+	RetryCount int
 }
 
 type IndexOverview struct {
@@ -26,6 +28,7 @@ type IndexOverview struct {
 }
 
 type InstallerState struct {
+	Busy                 bool // Prevent button presses colliding mid-execution
 	Grabber              *Downloader
 	Repo                 *SqliteRepo
 	window               fyne.Window
@@ -35,7 +38,7 @@ type InstallerState struct {
 	totalSize            int64
 	downloadedSize       int64
 	downloadedFiles      int64
-	downloadSpeed        int64
+	downloadSpeed        float64
 	baseUrl              string
 	formatDownloadedSize binding.String
 	formatTotalSize      binding.String
