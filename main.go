@@ -172,12 +172,14 @@ func setupLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 
 func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 	pathHeaderLabel := widget.NewLabel("Install Path: ")
+	pathHeaderLabel.TextStyle = fyne.TextStyle{Bold: true}
 	pathLabel := widget.NewLabelWithData(state.folderPath)
 	pathContainer := container.New(layout.NewHBoxLayout(),
 		pathHeaderLabel,
 		pathLabel)
 
 	sourceHeaderLabel := widget.NewLabel("Source: ")
+	sourceHeaderLabel.TextStyle = fyne.TextStyle{Bold: true}
 	sourceLabel := widget.NewLabel(state.baseUrl)
 	sourceContainer := container.New(layout.NewHBoxLayout(),
 		sourceHeaderLabel,
@@ -185,6 +187,7 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 
 	// Create active file bars
 	fileLabel := widget.NewLabel("File: ")
+	fileLabel.TextStyle = fyne.TextStyle{Bold: true}
 	fileHeader1 := widget.NewLabelWithData(state.fileTitle1)
 	fileHeader1.Alignment = fyne.TextAlignLeading
 	fileHeader1.Wrapping = fyne.TextTruncate
@@ -212,7 +215,6 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 	progressBarTotal := widget.NewProgressBarWithData(state.progressBarTotal)
 	totalLabel := canvas.NewText("Total Progress...", color.White)
 
-	rateLimitLabel := widget.NewLabel("Download Speed Limit:")
 	rateLimitCurrentLabel := widget.NewLabelWithData(state.formatRateLimit)
 	rateLimitEntry := widget.NewEntryWithData(state.rateLimitEntry)
 	rateLimitSet := widget.NewButton("Set (KB/s)", func() {
@@ -260,11 +262,7 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 		}
 	})
 
-	rateLimContainer := container.New(layout.NewVBoxLayout(),
-		container.New(layout.NewHBoxLayout(),
-			rateLimitLabel,
-			rateLimitCurrentLabel),
-		container.NewBorder(nil, nil, nil, rateLimitSet, rateLimitEntry))
+	rateLimContainer := container.NewBorder(nil, nil, nil, rateLimitSet, rateLimitEntry)
 
 	// Create buttons
 	button1 := widget.NewButton("Start", func() {
@@ -306,8 +304,7 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 	// Create a row with buttons
 	buttonsRow := container.NewHBox(button1, button2, button3)
 
-	// Create 3 additional labels
-	downloadedHeaderLabel := widget.NewLabel("Downloaded:")
+	// Create stats labels
 	downloadedLabel := widget.NewLabelWithData(state.formatDownloadedSize)
 	downloadedLabel.Alignment = fyne.TextAlignLeading
 	downloadedLabel.TextStyle = fyne.TextStyle{Monospace: true}
@@ -319,23 +316,30 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 		widget.NewLabel("/"),
 		totalSizeLabel)
 
-	speedHeaderLabel := widget.NewLabel("Average Speed:")
-	speedHeaderLabel.Alignment = fyne.TextAlignLeading
 	speedLabel := widget.NewLabelWithData(state.formatDownloadSpeed)
 	speedLabel.Alignment = fyne.TextAlignLeading
 	speedLabel.TextStyle = fyne.TextStyle{Monospace: true}
 
+	statsForm := &widget.Form{
+		Items: []*widget.FormItem{
+			{Text: "Downloaded:", Widget: downloadedContainer},
+			{Text: "Average Speed:", Widget: speedLabel},
+			{Text: "Download Speed Limit:", Widget: rateLimitCurrentLabel},
+		},
+	}
+
 	leftMainContent := container.New(layout.NewVBoxLayout(),
 		pathContainer,
-		sourceContainer,
 		totalLabel,
 		progressBarTotal,
+		statsForm,
 		layout.NewSpacer(),
 		rateLimContainer,
 		buttonsRow,
 	)
 
 	rightMainContent := container.New(layout.NewVBoxLayout(),
+		sourceContainer,
 		fileContainer1,
 		fileProgressBar1,
 		fileContainer2,
@@ -347,21 +351,8 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 
 	mainContent := container.NewBorder(nil, nil, leftMainContent, nil, rightMainContent)
 
-	line := canvas.NewLine(color.Gray{Y: 0x55})
-	line.StrokeWidth = 2
-
-	leftSideContent := container.New(layout.NewHBoxLayout(),
-		container.New(layout.NewVBoxLayout(),
-			layout.NewSpacer(),
-			downloadedHeaderLabel,
-			downloadedContainer,
-			speedHeaderLabel,
-			speedLabel),
-		line,
-	)
-
 	// Combine the grid layout and sidebar label in a horizontal box
-	mainLayout := container.NewBorder(topBarLayout("install"), nil, leftSideContent, nil, mainContent)
+	mainLayout := container.NewBorder(topBarLayout("install"), nil, nil, nil, mainContent)
 
 	return mainLayout
 }
@@ -461,7 +452,7 @@ func FormatBytes(size int64) string {
 
 	var unitIndex int
 	floatSize := float64(size)
-	for unitIndex = 0; unitIndex < len(units); unitIndex++ {
+	for unitIndex = 0; unitIndex < len(units)-1; unitIndex++ {
 		if floatSize < 1024.0 {
 			break
 		}

@@ -2,15 +2,18 @@ package main
 
 import (
 	"context"
-	"crypto/sha1"
 	"database/sql"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"fyne.io/fyne/v2/dialog"
 	"github.com/cavaliergopher/grab/v3"
+	"hash/crc32"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
+	"unsafe"
 )
 
 type Update struct {
@@ -155,6 +158,34 @@ func (d *Downloader) Resume() error {
 		}
 		// Channel closed, finish out
 		d.responderWg.Done()
+	}()
+
+	// Set up empty dirs handler
+
+	// Attach to any wait group, it's independent anyway
+	d.responderWg.Add(1)
+	go func() {
+		defer d.responderWg.Done()
+		// Loop finding empty dirs until done or context ends
+		for {
+			select {
+			case <-d.ctx.Done():
+				return
+			default:
+				// Get next empty dir
+				dir, err := d.state.Repo.GetNextEmptyDir()
+				if err != nil {
+					dialog.NewError(&DatabaseError{err}, d.state.window).Show()
+					return
+				}
+				dest := filepath.Join(d.installPath, dir)
+				err = os.MkdirAll(dest, os.ModePerm)
+				if err != nil {
+					dialog.NewError(&FatalDownloadFailure{err}, d.state.window).Show()
+					return
+				}
+			}
+		}
 	}()
 
 	// Set up UI updater
@@ -428,11 +459,11 @@ func (d *Downloader) NewRequest(f *IndexedFile) (*grab.Request, error) {
 	}
 
 	// Add automatic checksumming
-	sum, err := hex.DecodeString(f.SHA1)
+	sum, err := hex.DecodeString(fmt.Sprintf("%08x", f.CRC32))
 	if err != nil {
 		return nil, err
 	}
-	req.SetChecksum(sha1.New(), sum, true)
+	req.SetChecksum(crc32.NewIEEE(), sum, true)
 	req.Size = f.Size
 	req = req.WithContext(d.ctx)
 	req.BufferSize = d.bufferSize
@@ -444,4 +475,10 @@ func (d *Downloader) NewRequest(f *IndexedFile) (*grab.Request, error) {
 	req.Tag = f
 
 	return req, nil
+}
+
+func intToBytes(n int) []byte {
+	bytes := make([]byte, unsafe.Sizeof(n)) // Assuming int is 4 bytes on your platform
+	binary.BigEndian.PutUint32(bytes, uint32(n))
+	return bytes
 }

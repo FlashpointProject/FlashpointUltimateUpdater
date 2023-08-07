@@ -18,7 +18,7 @@ type UiFile struct {
 type IndexedFile struct {
 	Filepath   string `json:"path"`
 	Size       int64  `json:"size"`
-	SHA1       string `json:"sha1"`
+	CRC32      int    `json:"crc32"`
 	RetryCount int
 }
 

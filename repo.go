@@ -52,6 +52,20 @@ func (repo *SqliteRepo) MarkFileDone(file *IndexedFile) error {
 	return err
 }
 
+func (repo *SqliteRepo) GetNextEmptyDir() (string, error) {
+	var d string
+	err := repo.db.QueryRow(`UPDATE empty_dirs SET done = true
+		WHERE rowid = (
+		    SELECT MIN(rowid)
+		    FROM empty_dirs
+		    WHERE done = false
+		) RETURNING path`).Scan(&d)
+	if err != nil {
+		return "", err
+	}
+	return d, err
+}
+
 func (repo *SqliteRepo) GetNextFile() (*IndexedFile, error) {
 	var f IndexedFile
 	f.RetryCount = 0
@@ -60,15 +74,16 @@ func (repo *SqliteRepo) GetNextFile() (*IndexedFile, error) {
 		    SELECT MIN(rowid)
 		    FROM files
 		    WHERE done = false AND taken = false
-		) RETURNING path, size, sha1`).Scan(&f.Filepath, &f.Size, &f.SHA1)
+		) RETURNING path, size, crc32`).Scan(&f.Filepath, &f.Size, &f.CRC32)
 	if err != nil {
 		return nil, err
 	}
 	return &f, nil
 }
 
+// GetNextFileBatch Cannot be safely executed in parallel
 func (repo *SqliteRepo) GetNextFileBatch(limit int64) ([]*IndexedFile, error) {
-	rows, err := repo.db.Query("SELECT path, size, sha1 FROM files WHERE done = false AND taken = false LIMIT ?", limit)
+	rows, err := repo.db.Query("SELECT path, size, crc32 FROM files WHERE done = false AND taken = false LIMIT ?", limit)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +93,7 @@ func (repo *SqliteRepo) GetNextFileBatch(limit int64) ([]*IndexedFile, error) {
 	for rows.Next() {
 		var f IndexedFile
 		f.RetryCount = 0
-		err = rows.Scan(&f.Filepath, &f.Size, &f.SHA1)
+		err = rows.Scan(&f.Filepath, &f.Size, &f.CRC32)
 		if err != nil {
 			return nil, err
 		}
@@ -106,6 +121,10 @@ func (repo *SqliteRepo) ResetDownloadState() error {
 		return err
 	}
 	_, err = repo.db.Exec("UPDATE files SET taken = false")
+	if err != nil {
+		return err
+	}
+	_, err = repo.db.Exec("UPDATE empty_dirs SET done = false")
 	return err
 }
 
