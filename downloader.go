@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"fyne.io/fyne/v2/dialog"
 	"github.com/cavaliergopher/grab/v3"
+	"github.com/dustin/go-humanize"
 	"hash/crc32"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ type Update struct {
 	IndexFile       *IndexedFile
 	Retry           bool
 	RemoveTakenFlag bool
+	Failure         error
 	Progress        float64
 	Bytes           int64
 	Done            bool
@@ -74,6 +76,10 @@ func (d *Downloader) Resume() error {
 	// Reset context
 	d.ctx, d.cancel = context.WithCancel(context.Background())
 
+	// Reset failure count
+	d.state.downloadFailures = 0
+	_ = d.state.formatDownloadFailures.Set("0")
+
 	// Set up background
 	d.reqch = make(chan *grab.Request, 10)
 	d.respch = make(chan *grab.Response, 4)
@@ -121,19 +127,31 @@ func (d *Downloader) Resume() error {
 									IndexFile:       f,
 									Retry:           false,
 									RemoveTakenFlag: true,
+									Failure:         nil,
 									Progress:        1,
 									Bytes:           0,
 									Done:            true,
 								}
 								return
 							} else {
-								// Bad download, retry if below 3 retries
-								if f.RetryCount < 3 {
+								// Bad download, retry if below 5 retries
+								if f.RetryCount < 5 {
 									f.RetryCount += 1
 									d.updatech <- &Update{
 										IndexFile:       f,
 										Retry:           true,
 										RemoveTakenFlag: false,
+										Failure:         nil,
+										Progress:        1,
+										Bytes:           0,
+										Done:            true,
+									}
+								} else {
+									d.updatech <- &Update{
+										IndexFile:       f,
+										Retry:           false,
+										RemoveTakenFlag: false,
+										Failure:         err,
 										Progress:        1,
 										Bytes:           0,
 										Done:            true,
@@ -146,6 +164,7 @@ func (d *Downloader) Resume() error {
 								IndexFile:       f,
 								Retry:           false,
 								RemoveTakenFlag: false,
+								Failure:         nil,
 								Progress:        1,
 								Bytes:           resp.BytesComplete(),
 								Done:            true,
@@ -175,8 +194,10 @@ func (d *Downloader) Resume() error {
 				// Get next empty dir
 				dir, err := d.state.Repo.GetNextEmptyDir()
 				if err != nil {
-					dialog.NewError(&DatabaseError{err}, d.state.window).Show()
-					return
+					if err != sql.ErrNoRows {
+						dialog.NewError(&DatabaseError{err}, d.state.window).Show()
+						return
+					}
 				}
 				dest := filepath.Join(d.installPath, dir)
 				err = os.MkdirAll(dest, os.ModePerm)
@@ -270,6 +291,12 @@ func (d *Downloader) Resume() error {
 		_ = d.state.fileProgress4.Set(0)
 
 		for update := range d.updatech {
+			// Download failure, maximum retries reached
+			if update.Failure != nil {
+				d.state.downloadFailures += 1
+				_ = d.state.formatDownloadFailures.Set(humanize.Comma(d.state.downloadFailures))
+			}
+
 			// Failed download because of context cancel, remove taken flag instead, ignore ui update
 			if update.RemoveTakenFlag {
 				err = d.state.Repo.ClearTaken(update.IndexFile)
@@ -284,6 +311,7 @@ func (d *Downloader) Resume() error {
 				d.newRequestWg.Add(1)
 				go func() {
 					defer d.newRequestWg.Done()
+					time.Sleep(time.Second * 1) // Retry after 3 seconds
 					select {
 					case <-d.ctx.Done():
 						{
@@ -305,29 +333,14 @@ func (d *Downloader) Resume() error {
 			}
 
 			// Update UI element
-			updateIdx := -1
-			for idx, f := range uifiles {
-				if f.Filepath == update.IndexFile.Filepath {
-					// Send bytes update to speed handler
-					bytesDiff := update.Bytes - f.Bytes
-					speedch <- bytesDiff
-					// Update ui file
-					f.Progress = update.Progress
-					f.Done = update.Done
-					f.Bytes = update.Bytes
-					updateIdx = idx
-					break
-				}
-			}
-			if updateIdx == -1 {
-				// Didn't find existing entry, find an older one to replace
+			if update.Failure == nil {
+				updateIdx := -1
 				for idx, f := range uifiles {
-					if f.Done == true {
+					if f.Filepath == update.IndexFile.Filepath {
 						// Send bytes update to speed handler
-						bytesDiff := update.Bytes
+						bytesDiff := update.Bytes - f.Bytes
 						speedch <- bytesDiff
 						// Update ui file
-						f.Filepath = update.IndexFile.Filepath
 						f.Progress = update.Progress
 						f.Done = update.Done
 						f.Bytes = update.Bytes
@@ -335,32 +348,53 @@ func (d *Downloader) Resume() error {
 						break
 					}
 				}
-			}
-			// If updated ui state, update element
-			if updateIdx != -1 {
-				if updateIdx == 0 {
-					_ = d.state.fileTitle1.Set(update.IndexFile.Filepath)
-					_ = d.state.fileProgress1.Set(update.Progress)
+				if updateIdx == -1 {
+					// Didn't find existing entry, find an older one to replace
+					for idx, f := range uifiles {
+						if f.Done == true {
+							// Send bytes update to speed handler
+							bytesDiff := update.Bytes
+							speedch <- bytesDiff
+							// Update ui file
+							f.Filepath = update.IndexFile.Filepath
+							f.Progress = update.Progress
+							f.Done = update.Done
+							f.Bytes = update.Bytes
+							updateIdx = idx
+							break
+						}
+					}
 				}
-				if updateIdx == 1 {
-					_ = d.state.fileTitle2.Set(update.IndexFile.Filepath)
-					_ = d.state.fileProgress2.Set(update.Progress)
-				}
-				if updateIdx == 2 {
-					_ = d.state.fileTitle3.Set(update.IndexFile.Filepath)
-					_ = d.state.fileProgress3.Set(update.Progress)
-				}
-				if updateIdx == 3 {
-					_ = d.state.fileTitle4.Set(update.IndexFile.Filepath)
-					_ = d.state.fileProgress4.Set(update.Progress)
+				// If updated ui state, update element
+				if updateIdx != -1 {
+					if updateIdx == 0 {
+						_ = d.state.fileTitle1.Set(update.IndexFile.Filepath)
+						_ = d.state.fileProgress1.Set(update.Progress)
+					}
+					if updateIdx == 1 {
+						_ = d.state.fileTitle2.Set(update.IndexFile.Filepath)
+						_ = d.state.fileProgress2.Set(update.Progress)
+					}
+					if updateIdx == 2 {
+						_ = d.state.fileTitle3.Set(update.IndexFile.Filepath)
+						_ = d.state.fileProgress3.Set(update.Progress)
+					}
+					if updateIdx == 3 {
+						_ = d.state.fileTitle4.Set(update.IndexFile.Filepath)
+						_ = d.state.fileProgress4.Set(update.Progress)
+					}
 				}
 			}
 
 			if update.Done {
-				// Mark as done
-				err := d.state.Repo.MarkFileDone(update.IndexFile)
-				if err != nil {
-					dialog.NewError(&DatabaseError{err}, d.state.window).Show()
+				if update.Failure == nil {
+					// Mark as done
+					d.state.downloadedSize += update.IndexFile.Size
+					d.state.downloadedFiles += 1
+					err := d.state.Repo.MarkFileDone(update.IndexFile)
+					if err != nil {
+						dialog.NewError(&DatabaseError{err}, d.state.window).Show()
+					}
 				}
 
 				d.newRequestWg.Add(1)
@@ -392,9 +426,11 @@ func (d *Downloader) Resume() error {
 				}()
 
 				// Update Total Progress bar state
-				d.state.downloadedSize += update.IndexFile.Size
-				d.state.downloadedFiles += 1
 				err = d.state.formatDownloadedSize.Set(FormatBytes(d.state.downloadedSize))
+				if err != nil {
+					dialog.NewError(err, d.state.window).Show()
+				}
+				err = d.state.formatDownloadedFiles.Set(humanize.Comma(d.state.downloadedFiles))
 				if err != nil {
 					dialog.NewError(err, d.state.window).Show()
 				}
@@ -402,6 +438,26 @@ func (d *Downloader) Resume() error {
 				err = d.state.progressBarTotal.Set(progress)
 				if err != nil {
 					dialog.NewError(err, d.state.window).Show()
+				}
+
+				// Check if we're done
+				totalFiles := d.state.downloadedFiles + d.state.downloadFailures
+				if totalFiles == d.state.totalFiles {
+					// Done!
+					err := d.state.Repo.ClearTakenAll()
+					d.cancel()
+					go func() {
+						d.Stop(true)
+						if err != nil {
+							dialog.NewError(&DatabaseError{err}, d.state.window).Show()
+						} else {
+							if d.state.downloadFailures > 0 {
+								dialog.NewInformation("Finished", fmt.Sprintf("Install finished with %d failures, you will have to press start again to retry these failed files.", d.state.downloadFailures), d.state.window).Show()
+							} else {
+								dialog.NewInformation("Finished", "Install finished with no failures", d.state.window).Show()
+							}
+						}
+					}()
 				}
 
 			}
@@ -423,18 +479,20 @@ func (d *Downloader) Resume() error {
 		d.reqch <- req
 	}
 	d.running = true
-	d.started = true
+	_ = d.state.runningLabel.Set("Running")
 
 	return nil
 }
 
-func (d *Downloader) Stop() {
+func (d *Downloader) Stop(skipCancelContext bool) {
 	if !d.running {
 		return
 	}
 
 	// Stop new and current requests
-	d.cancel()
+	if !skipCancelContext {
+		d.cancel()
+	}
 	d.newRequestWg.Wait()
 	close(d.reqch)
 
@@ -448,6 +506,7 @@ func (d *Downloader) Stop() {
 	d.updaterWg.Wait()
 
 	d.running = false
+	_ = d.state.runningLabel.Set("Stopped")
 }
 
 func (d *Downloader) NewRequest(f *IndexedFile) (*grab.Request, error) {

@@ -29,33 +29,52 @@ type IndexOverview struct {
 	BaseUrl    string `json:"base_url"`
 }
 
+type Config struct {
+	MetaUrl string `json:"meta_url"`
+}
+
+type Meta struct {
+	Current   string   `json:"current"`
+	Path      string   `json:"path"`
+	Available []string `json:"available"`
+}
+
 type InstallerState struct {
-	Busy                 bool // Prevent button presses colliding mid-execution
-	Grabber              *Downloader
-	Repo                 *SqliteRepo
-	window               fyne.Window
-	folderPath           binding.String
-	installName          binding.String
-	totalFiles           int64
-	totalSize            int64
-	downloadedSize       int64
-	downloadedFiles      int64
-	downloadSpeed        float64
-	baseUrl              string
-	formatDownloadedSize binding.String
-	formatTotalSize      binding.String
-	formatDownloadSpeed  binding.String
-	progressBarTotal     binding.Float
-	fileProgress1        binding.Float
-	fileProgress2        binding.Float
-	fileProgress3        binding.Float
-	fileProgress4        binding.Float
-	fileTitle1           binding.String
-	fileTitle2           binding.String
-	fileTitle3           binding.String
-	fileTitle4           binding.String
-	rateLimitEntry       binding.String
-	formatRateLimit      binding.String
+	Busy                   bool // Prevent button presses colliding mid-execution
+	Grabber                *Downloader
+	Repo                   *SqliteRepo
+	Config                 *Config
+	Meta                   *Meta
+	App                    fyne.App
+	window                 fyne.Window
+	folderPath             binding.String
+	installName            binding.String
+	totalFiles             int64
+	totalSize              int64
+	downloadedSize         int64
+	downloadedFiles        int64
+	downloadSpeed          float64
+	downloadFailures       int64
+	baseUrl                string
+	runningLabel           binding.String
+	formatDownloadedFiles  binding.String
+	formatDownloadedSize   binding.String
+	formatTotalSize        binding.String
+	formatTotalFiles       binding.String
+	formatDownloadSpeed    binding.String
+	formatDownloadFailures binding.String
+	progressBarTotal       binding.Float
+	fileProgress1          binding.Float
+	fileProgress2          binding.Float
+	fileProgress3          binding.Float
+	fileProgress4          binding.Float
+	fileTitle1             binding.String
+	fileTitle2             binding.String
+	fileTitle3             binding.String
+	fileTitle4             binding.String
+	rateLimitEntry         binding.String
+	formatRateLimit        binding.String
+	resumable              bool
 }
 
 type NoValidPathFoundError struct{}
@@ -70,6 +89,14 @@ type BrokenResumableState struct {
 
 func (e *BrokenResumableState) Error() string {
 	return fmt.Sprintf("Broken resumable state found, must use a new index\n%s", e.err.Error())
+}
+
+type DownloadFailure struct {
+	err error
+}
+
+func (e *DownloadFailure) Error() string {
+	return fmt.Sprintf("Download failure after 5 retries, retry later.\n%s", e.err.Error())
 }
 
 type FatalDownloadFailure struct {
@@ -92,6 +119,28 @@ type BadRateLimit struct{}
 
 func (e *BadRateLimit) Error() string {
 	return "Invalid rate limit"
+}
+
+type ConfigError struct {
+	err error
+}
+
+func (e *ConfigError) Error() string {
+	return fmt.Sprintf("Failed to load config\n%s", e.err.Error())
+}
+
+type MetaError struct {
+	err error
+}
+
+func (e *MetaError) Error() string {
+	return fmt.Sprintf("Failed to load meta.json from remote, cannot continue\n%s", e.err.Error())
+}
+
+type VersionTooOld struct{}
+
+func (e *VersionTooOld) Error() string {
+	return "Current version too old, you must upgrade to continue install"
 }
 
 type DownloadRateLimiter struct {

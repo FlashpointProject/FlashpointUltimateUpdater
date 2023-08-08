@@ -3,3 +3,4 @@ ultupdater.exe
 venv
 test
 .idea
+./*.exe

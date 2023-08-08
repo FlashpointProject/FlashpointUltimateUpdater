@@ -47,6 +47,16 @@ func (repo *SqliteRepo) GetTotalDownloadedSize() (int64, error) {
 	return total, nil
 }
 
+func (repo *SqliteRepo) GetTotalDownladedFiles() (int64, error) {
+	var total int64
+	err := repo.db.QueryRow("SELECT COUNT(*) FROM files WHERE done = true").
+		Scan(&total)
+	if err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func (repo *SqliteRepo) MarkFileDone(file *IndexedFile) error {
 	_, err := repo.db.Exec("UPDATE files SET done = true WHERE path = ?", file.Filepath)
 	return err
@@ -64,6 +74,11 @@ func (repo *SqliteRepo) GetNextEmptyDir() (string, error) {
 		return "", err
 	}
 	return d, err
+}
+
+func (repo *SqliteRepo) Close() error {
+	err := repo.db.Close()
+	return err
 }
 
 func (repo *SqliteRepo) GetNextFile() (*IndexedFile, error) {
