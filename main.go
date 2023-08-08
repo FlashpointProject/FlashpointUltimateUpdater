@@ -378,12 +378,12 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 		pathHeaderLabel,
 		pathLabel)
 
-	sourceHeaderLabel := widget.NewLabel("Source: ")
-	sourceHeaderLabel.TextStyle = fyne.TextStyle{Bold: true}
-	sourceLabel := widget.NewLabel(state.baseUrl)
-	sourceContainer := container.New(layout.NewHBoxLayout(),
-		sourceHeaderLabel,
-		sourceLabel)
+	versionHeaderLabel := widget.NewLabel("Version: ")
+	versionHeaderLabel.TextStyle = fyne.TextStyle{Bold: true}
+	versionLabel := widget.NewLabelWithData(state.installName)
+	versionContainer := container.New(layout.NewHBoxLayout(),
+		versionHeaderLabel,
+		versionLabel)
 
 	// Create active file bars
 	fileLabel := widget.NewLabel("File: ")
@@ -573,7 +573,7 @@ func mainLayout(w fyne.Window, state *InstallerState) *fyne.Container {
 	)
 
 	rightMainContent := container.New(layout.NewVBoxLayout(),
-		sourceContainer,
+		versionContainer,
 		fileContainer1,
 		fileProgressBar1,
 		fileContainer2,
