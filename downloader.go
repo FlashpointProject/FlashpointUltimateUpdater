@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"fyne.io/fyne/v2/dialog"
@@ -14,7 +13,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-	"unsafe"
 )
 
 type Update struct {
@@ -202,6 +200,7 @@ func (d *Downloader) Resume() error {
 				dest := filepath.Join(d.installPath, dir)
 				err = os.MkdirAll(dest, os.ModePerm)
 				if err != nil {
+					// Illegal folder on windows?
 					dialog.NewError(&FatalDownloadFailure{err}, d.state.window).Show()
 					return
 				}
@@ -417,9 +416,18 @@ func (d *Downloader) Resume() error {
 							} else {
 								req, err := d.NewRequest(f)
 								if err != nil {
-									dialog.NewError(err, d.state.window).Show()
+									// Send failure (bad parsing)
+									d.updatech <- &Update{
+										IndexFile: f,
+										Progress:  0,
+										Bytes:     0,
+										Done:      true,
+										Retry:     false,
+										Failure:   &FatalDownloadFailure{err},
+									}
+								} else {
+									d.reqch <- req
 								}
-								d.reqch <- req
 							}
 						}
 					}
@@ -472,11 +480,19 @@ func (d *Downloader) Resume() error {
 	for _, f := range files {
 		req, err := d.NewRequest(f)
 		if err != nil {
-			return err
+			// Send failure (bad parsing)
+			d.updatech <- &Update{
+				IndexFile: f,
+				Progress:  0,
+				Bytes:     0,
+				Done:      true,
+				Retry:     false,
+				Failure:   &FatalDownloadFailure{err},
+			}
+		} else {
+			// Add request to queue
+			d.reqch <- req
 		}
-
-		// Add request to queue
-		d.reqch <- req
 	}
 	d.running = true
 	_ = d.state.runningLabel.Set("Running")
@@ -534,10 +550,4 @@ func (d *Downloader) NewRequest(f *IndexedFile) (*grab.Request, error) {
 	req.Tag = f
 
 	return req, nil
-}
-
-func intToBytes(n int) []byte {
-	bytes := make([]byte, unsafe.Sizeof(n)) // Assuming int is 4 bytes on your platform
-	binary.BigEndian.PutUint32(bytes, uint32(n))
-	return bytes
 }

@@ -4,3 +4,4 @@ venv
 test
 .idea
 ./*.exe
+bundle.go
