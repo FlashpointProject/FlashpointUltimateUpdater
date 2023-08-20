@@ -6,6 +6,7 @@ Flashpoint Ultimate Updater is designed to install extremely large numbers of im
 
 Features:
 - Resumable install state
+- Speed limitter
 - Pause and start downloader
 - Scan and repair existing files
 - Resume partial file downloads
